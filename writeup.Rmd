@@ -1,0 +1,105 @@
+---
+title: 'Practical Machine Learning: Predict the manner in which they did the exercise'
+author: "Kriddiphat Kongsupapsiri"
+date: "April 26, 2015"
+output:
+  html_document:
+    keep_md: yes
+---
+##Synopsis
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks.
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+More information is available from the website here: http://groupware.les.inf.puc-rio.br/har
+
+##Data Processing
+####1. Load required R libraries:
+```{r, message=FALSE}
+library(caret)
+library(ggplot2)
+library(randomForest)
+```
+
+####2. Load Data
+Download and read the data from http://groupware.les.inf.puc-rio.br/har.
+```{r, cache=TRUE}
+download.file('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'
+              ,destfile='pml-training.csv',method='curl')
+download.file('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
+              ,destfile='pml-testing.csv',method='curl')
+trainRaw <- read.csv('pml-training.csv', na.strings= c("NA",""))
+testRaw <- read.csv('pml-testing.csv', na.strings= c("NA",""))
+```
+
+Identify number of observations and variables.
+```{r}
+dim(trainRaw)
+dim(testRaw)
+```
+
+####3. Clean data
+Count the number of NAs in each columns and delete Unnecessary varibles that unlikely to be related.
+```{r}
+#Remove all NA columns
+colsNA <- colSums(is.na(trainRaw))==0
+train <- trainRaw[, colsNA]
+#Remove Unnecessary columns
+removeCols <- c('X', 'user_name', 'raw_timestamp_part_1', 'raw_timestamp_part_2', 
+                'cvtd_timestamp', 'new_window', 'num_window')
+train <- train[, -which(names(train) %in% removeCols)]
+```
+
+```{r}
+dim(train)
+```
+
+####4. Split data for Cross Validation
+Create data partition in the training set to perform the cross validation.
+```{r}
+set.seed(1)
+inTrain <- createDataPartition(train$classe, p=0.7, list = FALSE)
+subTrain <- train[inTrain, ]
+subTest <- train[-inTrain, ]
+```
+
+##Results
+####1. Create the Random Forest model
+Train the model using a random forest alogorithm. In this analysis, we set ntree=10 in order to reduce the time consumption in the model building process.
+
+```{r, cache=TRUE}
+model <- train(classe ~., data=subTrain, method="rf", ntree=10) 
+model
+```
+
+Calculate and plot the variable importance.
+```{r}
+varImpPlot(model$finalModel, main="Variable Importance")
+```
+
+####2. Cross Validation and Out of Sample Errors
+Compare the predicted values from cross validation data with the observed values using Confusion Matrix.
+```{r}
+predSubTest <- predict(model, subTest)
+confMatrix <- confusionMatrix(subTest$classe, predSubTest)
+confMatrix
+```
+
+Calculate accuracy:
+```{r}
+accuracy <- postResample(subTest$classe, predSubTest)[[1]]
+accuracy
+```
+
+Calculate out of sample error:
+```{r}
+outOfSample <- (1 - accuracy)
+outOfSample
+```
+
+####3. Predict testing data
+Apply the original testing data and predict the results.
+```{r}
+resultTest <- predict(model, testRaw)
+resultTest
+```
